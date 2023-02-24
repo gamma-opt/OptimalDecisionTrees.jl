@@ -34,6 +34,7 @@ function epsilon_j(j)
 
     for i in eachindex(x_j_dist) # calculate distances between sorted x_j's
         x_j_dist[i] = x_j[i] - x_j[i + 1] # this is different than in the book!!! i and i+1 swapped
+                                          # Do you agree that this seems logical?
     end
 
     nz_x_j_dist = x_j_dist[x_j_dist .> 0] # remove zero distances
@@ -47,7 +48,7 @@ for j in 1:p # for all features
 end
 epsilon_min = findmin(epsilon)[1]
 
-# R_cursive and L_cursive
+# Functions to calculate R_cursive and L_cursive
 function find_R_cursive(t)
     temp_set = Set() # init empty set
     while t != 1 # when not in root node
@@ -71,7 +72,8 @@ function find_L_cursive(t)
     end
     return temp_set
 end
-# calculate R_cursive and L_cursive for all nodes
+
+# R_cursive and L_cursive vectors to hold info for all nodes
 R_cursive = Vector{Set{Int}}(undef, T)
 L_cursive = Vector{Set{Int}}(undef, T)
 for f in 1:T
