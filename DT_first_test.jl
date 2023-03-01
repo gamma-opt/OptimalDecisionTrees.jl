@@ -91,7 +91,7 @@ for f in 1:T
     L_cursive[f] = find_L_cursive(f)
 end
 
-function init_vars(model::Model) 
+function formulation(model::Model) 
     @variable(model, d[1:largest_B], Bin)           # d_t
 
     @variable(model, a[1:p, 1:largest_B], Bin)      # a_jt
@@ -111,9 +111,9 @@ function init_vars(model::Model)
     @variable(model, N_kt[1:K, (largest_B+1):T])    # N_kt
 
     @variable(model, L[(largest_B+1):T] >= 0)       # L_t
-end
 
-function init_consts(model::Model)
+
+    # Constraints
     # d_T <= d_p(t)
     @constraint(model, [t = 2:largest_B], d[t] <= d[t÷2])
 
@@ -156,6 +156,10 @@ function init_consts(model::Model)
 
     # L_t >= N_t - N_kt - n(1 - c_kt)
     @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] >= N_t[t] - N_kt[k,t] - n*(1 - c[k,t]))
+
+
+    # Objective
+    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C)
 end
 
 
@@ -164,11 +168,9 @@ end
 model = Model(HiGHS.Optimizer)
 
 # Initialize variables and constraints
-init_vars(model)
-init_consts(model)
+formulation(model)
+#init_consts(model)
 
-# Objective
-@objective(mdl, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C)
 
 
 
