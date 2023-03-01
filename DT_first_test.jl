@@ -3,6 +3,7 @@ using DataFrames
 using CSV
 using HiGHS
 using StatsBase
+using LinearAlgebra
 
 # Hyper-parameters
 D = 2
@@ -90,39 +91,84 @@ for f in 1:T
     L_cursive[f] = find_L_cursive(f)
 end
 
+function init_vars(model::Model) 
+    @variable(model, d[1:largest_B], Bin)           # d_t
 
-# Making the optimization model
+    @variable(model, a[1:p, 1:largest_B], Bin)      # a_jt
+
+    @variable(model, c[1:K, (largest_B+1):T], Bin)  # c_kt
+
+    @variable(model, l[(largest_B+1):T], Bin)       # l_t  
+
+    @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it
+
+    @variable(model, b[t=1:largest_B] >= 0)         # b_t
+
+    @variable(model, C)                             # C     
+
+    @variable(model, N_t[(largest_B+1):T])          # N_t
+
+    @variable(model, N_kt[1:K, (largest_B+1):T])    # N_kt
+
+    @variable(model, L[(largest_B+1):T] >= 0)       # L_t
+end
+
+function init_consts(model::Model)
+    # d_T <= d_p(t)
+    @constraint(model, [t = 2:largest_B], d[t] <= d[t÷2])
+
+    # 0 <= b_t <= d_t
+    @constraint(model, [t = 1:largest_B], b[t] <= d[t]) 
+
+    # sum(a_jt) == d_t
+    @constraint(model, [t = 1:largest_B], sum(a[j, t] for j in 1:p) == d[t])
+
+    # sum(z_it >= N_min*l_t)
+    @constraint(model, [t = (largest_B+1):T], sum(z[i, t] for i in 1:n) >= N_min*l[t])
+
+    # z_it <= l_t
+    @constraint(model, [i = 1:n, t = (largest_B+1):T], z[i,t] <= l[t])
+
+    # sum(z_it == 1)
+    @constraint(model, [i = 1:n], sum(z[i, t] for t in (largest_B+1):T) == 1)
+
+    # a_m*x_i >= b_m - (1 - z_it)
+    #@
+
+    # a_m*(x_i + epsilon - epsilon_min) + epsilon_min <= b_m + (1 + epsilon_max)(1 - z_it)
+    #@
+    # These will be harder, since size of m varies with different values of t. Could be implemented with if-statements?
+
+    # C == sum(d_t)
+    @constraint(model, C == sum(d[t] for t in 1:largest_B))
+
+    # sum(c_kt) == l_t
+    @constraint(model, [t = (largest_B+1):T], sum(c[k,t] for k in 1:K) == l[t])
+
+    # N_t == sum(z_it)
+    @constraint(model, [t = (largest_B+1):T], N_t[t] == sum(z[i,t] for i in 1:n))
+
+    # N_kt == sum(z_it)
+    @constraint(model, [t = (largest_B+1):T, k = 1:K], N_kt[k,t] == sum(z[i,t] for i in 1:K if y[i] == k))
+
+    # L_t <= N_t - N_kt + n*c_kt
+    @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] <= N_t[t] - N_kt[k,t] + n*c[k,t])
+
+    # L_t >= N_t - N_kt - n(1 - c_kt)
+    @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] >= N_t[t] - N_kt[k,t] - n*(1 - c[k,t]))
+end
+
+
+# Formulation
+# Initialize optimization model
 model = Model(HiGHS.Optimizer)
 
-# Variables (without other constraints)
-@variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it
-@variable(model, l[(largest_B+1):T], Bin)       # l_t   
-@variable(model, c[1:K, (largest_B+1):T], Bin)  # c_kt
-
-@variable(model, a[1:p, 1:largest_B], Bin)      # a_jt
-@variable(model, d[1:largest_B], Bin)           # d_t
-
-# More variables and constraints
-@variable(model, b[t=1:largest_B] >= 0)         # b_t
-@constraint(model, [t = 1:largest_B], b[t] <= d[t])
-
-@variable(model, C >= 0)                        # C
-@constraint(model, C == sum(d[t] for t in 1:largest_B))
-
-
-
-
-
-
-
-
-@variable(model, L[(largest_B+1):T] >= 0)
-
-# Constraints
-
+# Initialize variables and constraints
+init_vars(model)
+init_consts(model)
 
 # Objective
-@objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C)
+@objective(mdl, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C)
 
 
 
