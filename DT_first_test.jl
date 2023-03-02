@@ -6,9 +6,9 @@ using StatsBase
 using LinearAlgebra
 
 # Hyper-parameters
-D = 2
-N_min = 2
-alpha = 0.1
+D = 2 # Maximum depth of the tree
+N_min = 2 # Minimum number of points in any leaf node
+alpha = 0.1 # complexity parameter 
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -16,12 +16,12 @@ println(data_df)
 data_mat = Matrix(data_df) # convert from df to matrix
 
 # Constants
-n = size(data_mat, 1)
+n = size(data_mat, 1) # number of observations
 data_width = size(data_mat, 2)
-p = data_width - 1
+p = data_width - 1 # number of features
 
-T = 2^(D + 1) - 1
-largest_B = T ÷ 2 # floor function of T/2
+T = 2^(D + 1) - 1 # Maximum number of nodes in the tree of depth D 
+largest_B = T ÷ 2 # floor function of T/2 - number of branch nodes
 # T_B, T_L
 
 # Extract X and y from data
@@ -34,10 +34,18 @@ class_names = sort(collect(keys(dict_names_freqs)))
 dict_names_labels = Dict([string => index for (index, string) in enumerate(class_names)])
 dict_labels_names = Dict(value => key for (key, value) in dict_names_labels)
 dict_labels_freqs = Dict(a => dict_names_freqs[b] for (a, b) in dict_labels_names)
+y_labels = [dict_names_labels[y[i]] for i = 1:n]
+
+function Y(i::Int, k::Int, dataset::Vector{Any}) 
+    if dataset[i] == k return 1
+    else return -1
+    end
+end
+
 
 # More constants
-L_hat = maximum(values(dict_labels_freqs))
-K = length(class_names)
+L_hat = maximum(values(dict_labels_freqs)) # Number of points in the most popular class 
+K = length(class_names) # Total number of classes
 
 # Function to calculate j'th element of epsilon vector
 function epsilon_j(j)
@@ -57,60 +65,86 @@ epsilon = zeros(p) # init vector
 for j in 1:p # for all features
     epsilon[j] = epsilon_j(j)
 end
-epsilon_min = findmin(epsilon)[1]
+#epsilon_min = findmin(epsilon)[1]
 
-# R_cursive and L_cursive
-function find_R_cursive(t)
-    temp_set = Set() # init empty set
-    while t != 1 # when not in root node
-        next_t = t ÷ 2 # calculate parent node
-        if t % 2 == 1 # if node is on right branch..
-            push!(temp_set, next_t) # ..add its parent node to set
+# # R_cursive and L_cursive
+# function find_R_cursive(t)
+#     temp_set = Set() # init empty set
+#     while t != 1 # when not in root node
+#         next_t = t ÷ 2 # calculate parent node
+#         if t % 2 == 1 # if node is on right branch..
+#             push!(temp_set, next_t) # ..add its parent node to set
+#         end
+#         t = next_t # update next node (parent node)
+#     end
+#     return temp_set 
+# end
+
+# function find_L_cursive(t)
+#     temp_set = Set()
+#     while t != 1
+#         next_t = t ÷ 2
+#         if t % 2 == 0 # if node is on left branch
+#             push!(temp_set, next_t)
+#         end
+#         t = next_t
+#     end
+#     return temp_set
+# end
+# # calculate R_cursive and L_cursive for all nodes
+# R_cursive = Vector{Set{Int}}(undef, T)
+# L_cursive = Vector{Set{Int}}(undef, T)
+# for f in 1:T
+#     R_cursive[f] = find_R_cursive(f)
+#     L_cursive[f] = find_L_cursive(f)
+# end
+
+
+
+# function to generate set of ancestor node of t who followed left (A_l) and right (A_l) branches from the root node to the node t
+function ancestors_LR(t::Int)
+    A_l = Array{Int}(undef,0)
+    A_r = Array{Int}(undef,0)
+    current_node = t
+    current_parent = t÷2
+    while current_node != 1
+        if current_node % current_parent == 0
+            push!(A_l, current_parent)
+        else 
+            push!(A_r, current_parent)
         end
-        t = next_t # update next node (parent node)
+        current_node = current_parent
+        current_parent = current_parent÷2
     end
-    return temp_set 
+    return A_l, A_r
+
 end
 
-function find_L_cursive(t)
-    temp_set = Set()
-    while t != 1
-        next_t = t ÷ 2
-        if t % 2 == 0 # if node is on left branch
-            push!(temp_set, next_t)
-        end
-        t = next_t
-    end
-    return temp_set
-end
-# calculate R_cursive and L_cursive for all nodes
-R_cursive = Vector{Set{Int}}(undef, T)
-L_cursive = Vector{Set{Int}}(undef, T)
-for f in 1:T
-    R_cursive[f] = find_R_cursive(f)
-    L_cursive[f] = find_L_cursive(f)
-end
 
-function formulation(model::Model) 
-    @variable(model, d[1:largest_B], Bin)           # d_t
+function formulation(X,y, ) 
 
-    @variable(model, a[1:p, 1:largest_B], Bin)      # a_jt
+    model = Model(HiGHS.Optimizer)
 
-    @variable(model, c[1:K, (largest_B+1):T], Bin)  # c_kt
+    @variable(model, d[1:largest_B], Bin)           # d_t - indicator whether the split occured at node t (d_t = 1)
 
-    @variable(model, l[(largest_B+1):T], Bin)       # l_t  
+    @variable(model, a[1:p, 1:largest_B], Bin)      # a_jt - left-hands side of splitting condition
 
-    @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it
+    @variable(model, b[t=1:largest_B] >= 0)         # b_t - right-hand side of splitting condition
 
-    @variable(model, b[t=1:largest_B] >= 0)         # b_t
+    @variable(model, c[1:K, (largest_B+1):T], Bin)  # c_kt - predicition of each leaf node, i.e., c_kt = 1 => the node t has more points of class k
 
-    @variable(model, C)                             # C     
+    @variable(model, l[(largest_B+1):T], Bin)       # l_t  - indicator whther leaf t contains any points => l_t = 1
 
-    @variable(model, N_t[(largest_B+1):T])          # N_t
+    @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it - the indicator to track points assigned to each leaf node ( point i is at the node t => z_it = 1)
 
-    @variable(model, N_kt[1:K, (largest_B+1):T])    # N_kt
 
-    @variable(model, L[(largest_B+1):T] >= 0)       # L_t
+    #@variable(model, C)                             # C    
+
+    @variable(model, N_t[(largest_B+1):T])          # N_t - total number of points at leaf node t
+
+    @variable(model, N_kt[1:K, (largest_B+1):T])    # N_kt - number of points of label k at leaf node t 
+
+    @variable(model, L[(largest_B+1):T] >= 0)       # L_t - miscalssification loss at leaf node t
 
 
     # Constraints
@@ -133,14 +167,21 @@ function formulation(model::Model)
     @constraint(model, [i = 1:n], sum(z[i, t] for t in (largest_B+1):T) == 1)
 
     # a_m*x_i >= b_m - (1 - z_it)
-    #@
-
-    # a_m*(x_i + epsilon - epsilon_min) + epsilon_min <= b_m + (1 + epsilon_max)(1 - z_it)
-    #@
-    # These will be harder, since size of m varies with different values of t. Could be implemented with if-statements?
+    for t = (largest_B +1):T
+        t_A_l, t_A_r = ancestors_LR(t)
+        # a_m*x_i >= b_m - (1 - z_it)
+        @show t
+        @show t_A_l, t_A_r
+        if !isempty(t_A_r)
+            @constraint(model, [i = 1:n, m in t_A_r], sum(a[:, m].* X[i, :]) >= b[t] - (1  - z[i,t]))
+        end
+        if !isempty(t_A_l)
+            @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon)) <= b[t] + (1 + maximum(epsilon))*(1 - z[i,t]))
+        end
+    end
 
     # C == sum(d_t)
-    @constraint(model, C == sum(d[t] for t in 1:largest_B))
+    #@constraint(model, C == sum(d[t] for t in 1:largest_B))
 
     # sum(c_kt) == l_t
     @constraint(model, [t = (largest_B+1):T], sum(c[k,t] for k in 1:K) == l[t])
@@ -149,7 +190,10 @@ function formulation(model::Model)
     @constraint(model, [t = (largest_B+1):T], N_t[t] == sum(z[i,t] for i in 1:n))
 
     # N_kt == sum(z_it)
-    @constraint(model, [t = (largest_B+1):T, k = 1:K], N_kt[k,t] == sum(z[i,t] for i in 1:K if y[i] == k))
+    #@constraint(model, [t = (largest_B+1):T, k = 1:K], N_kt[k,t] == sum(z[i,t] for i in 1:K if y[i] == k))
+
+    # N_kt == sum(z_it)
+    @constraint(model, [t = (largest_B+1):T, k = 1:K], N_kt[k,t] == 0.5 * sum((1 + Y(i,k,y))*z[i,t] for i in 1:n))
 
     # L_t <= N_t - N_kt + n*c_kt
     @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] <= N_t[t] - N_kt[k,t] + n*c[k,t])
@@ -157,19 +201,15 @@ function formulation(model::Model)
     # L_t >= N_t - N_kt - n(1 - c_kt)
     @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] >= N_t[t] - N_kt[k,t] - n*(1 - c[k,t]))
 
-
     # Objective
-    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C)
+    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*sum(d[t] for t in 1:largest_B))
+
+    return model
 end
 
 
-# Formulation
 # Initialize optimization model
-model = Model(HiGHS.Optimizer)
-
-# Initialize variables and constraints
-formulation(model)
-#init_consts(model)
+formulation(X,y)
 
 
 
