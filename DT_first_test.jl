@@ -4,6 +4,8 @@ using CSV
 using HiGHS
 using StatsBase
 using LinearAlgebra
+using DecisionTree
+
 
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
@@ -26,6 +28,12 @@ largest_B = T ÷ 2 # floor function of T/2 - number of branch nodes
 
 # Extract X and y from data
 X = data_mat[:, 1:data_width-1]
+# Normalize x
+max_digits = 3
+for i = 1:size(X,1)
+    X[i,:] = round.(X[i,:]/sum(X[i,:]), digits = max_digits)
+end
+
 y = data_mat[:, data_width]
 
 # Dictionary, class labels to frequencies (works only for string names of labels)
@@ -57,6 +65,7 @@ function epsilon_j(j)
     end
 
     nz_x_j_dist = x_j_dist[x_j_dist .> 0] # remove zero distances
+    @show nz_x_j_dist
     return  findmin(nz_x_j_dist)[1] # find and return minimum dist
 end
 
@@ -68,36 +77,36 @@ end
 #epsilon_min = findmin(epsilon)[1]
 
 # # R_cursive and L_cursive
-# function find_R_cursive(t)
-#     temp_set = Set() # init empty set
-#     while t != 1 # when not in root node
-#         next_t = t ÷ 2 # calculate parent node
-#         if t % 2 == 1 # if node is on right branch..
-#             push!(temp_set, next_t) # ..add its parent node to set
-#         end
-#         t = next_t # update next node (parent node)
-#     end
-#     return temp_set 
-# end
+function find_R_cursive(t)
+    temp_set = Set() # init empty set
+    while t != 1 # when not in root node
+        next_t = t ÷ 2 # calculate parent node
+        if t % 2 == 1 # if node is on right branch..
+            push!(temp_set, next_t) # ..add its parent node to set
+        end
+        t = next_t # update next node (parent node)
+    end
+    return temp_set 
+end
 
-# function find_L_cursive(t)
-#     temp_set = Set()
-#     while t != 1
-#         next_t = t ÷ 2
-#         if t % 2 == 0 # if node is on left branch
-#             push!(temp_set, next_t)
-#         end
-#         t = next_t
-#     end
-#     return temp_set
-# end
-# # calculate R_cursive and L_cursive for all nodes
-# R_cursive = Vector{Set{Int}}(undef, T)
-# L_cursive = Vector{Set{Int}}(undef, T)
-# for f in 1:T
-#     R_cursive[f] = find_R_cursive(f)
-#     L_cursive[f] = find_L_cursive(f)
-# end
+function find_L_cursive(t)
+    temp_set = Set()
+    while t != 1
+        next_t = t ÷ 2
+        if t % 2 == 0 # if node is on left branch
+            push!(temp_set, next_t)
+        end
+        t = next_t
+    end
+    return temp_set
+end
+# calculate R_cursive and L_cursive for all nodes
+R_cursive = Vector{Set{Int}}(undef, T)
+L_cursive = Vector{Set{Int}}(undef, T)
+for f in 1:T
+    R_cursive[f] = find_R_cursive(f)
+    L_cursive[f] = find_L_cursive(f)
+end
 
 
 
@@ -106,22 +115,21 @@ function ancestors_LR(t::Int)
     A_l = Array{Int}(undef,0)
     A_r = Array{Int}(undef,0)
     current_node = t
-    current_parent = t÷2
     while current_node != 1
-        if current_node % current_parent == 0
+        current_parent = current_node÷2
+        if current_node % 2 == 0
             push!(A_l, current_parent)
         else 
             push!(A_r, current_parent)
         end
         current_node = current_parent
-        current_parent = current_parent÷2
     end
     return A_l, A_r
 
 end
 
 
-function formulation(X,y, ) 
+function formulation(X,y) 
 
     model = Model(HiGHS.Optimizer)
 
@@ -173,10 +181,10 @@ function formulation(X,y, )
         @show t
         @show t_A_l, t_A_r
         if !isempty(t_A_r)
-            @constraint(model, [i = 1:n, m in t_A_r], sum(a[:, m].* X[i, :]) >= b[t] - (1  - z[i,t]))
+            @constraint(model, [i = 1:n, m in t_A_r], sum(a[:, m].* X[i, :]) >= b[m] - (1  - z[i,t]))
         end
         if !isempty(t_A_l)
-            @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon)) <= b[t] + (1 + maximum(epsilon))*(1 - z[i,t]))
+            @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon)) <= b[m] + (1 + maximum(epsilon))*(1 - z[i,t]))
         end
     end
 
@@ -209,10 +217,28 @@ end
 
 
 # Initialize optimization model
-formulation(X,y)
+model=formulation(X,y)
+optimize!(model)
 
+value.(model[:a])
+value.(model[:b])
+z_output = Array(value.(model[:z]))
 
+# Trying out CART 
+features, labels = load_data("iris")    # also see "adult" and "digits" datasets
 
-
-
-
+# the data loaded are of type Array{Any}
+# cast them to concrete types for better performance
+features = float.(features)
+labels   = string.(labels)
+# train full-tree classifier
+n_subfeatures=1; max_depth=2; min_samples_leaf=1; min_samples_split=2
+min_purity_increase=0.0; pruning_purity = 1.0; seed=3
+model    =   build_tree(labels, features,
+                        n_subfeatures,
+                        max_depth,
+                        min_samples_leaf,
+                        min_samples_split,
+                        min_purity_increase;
+                        rng = seed)
+print_tree(model, 2)
