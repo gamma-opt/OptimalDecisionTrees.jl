@@ -1,3 +1,8 @@
+current_dir =  @__DIR__
+using Pkg
+cd(current_dir)
+Pkg.instantiate()
+
 using JuMP
 using DataFrames
 using CSV
@@ -10,31 +15,50 @@ using DecisionTree
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
 N_min = 2 # Minimum number of points in any leaf node
-alpha = 0.1 # complexity parameter 
+alpha = 0.001 # complexity parameter 
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
 println(data_df)
 data_mat = Matrix(data_df) # convert from df to matrix
-
-# Constants
-n = size(data_mat, 1) # number of observations
-data_width = size(data_mat, 2)
-p = data_width - 1 # number of features
-
-T = 2^(D + 1) - 1 # Maximum number of nodes in the tree of depth D 
-largest_B = T ÷ 2 # floor function of T/2 - number of branch nodes
-# T_B, T_L
-
-# Extract X and y from data
-X = data_mat[:, 1:data_width-1]
-# Normalize x
 max_digits = 3
-for i = 1:size(X,1)
-    X[i,:] = round.(X[i,:]/sum(X[i,:]), digits = max_digits)
-end
 
-y = data_mat[:, data_width]
+
+s = Array(data_mat[[1],:])
+# the function to trim the data to pnly two observations with two different labels if needed (the second parameter then = "reduced")
+# or work with full data (the second parameter is then "full")
+function data_generation(data, new_size)
+    if new_size == "reduced"
+        new_data = Array{Any}(undef, 2, size(data, 2))
+        new_data[1,:] = data[1,:]
+        new_data[2,:] = data[51,:]
+    else 
+        new_data = data
+    end
+    # Constants
+    n = size(new_data, 1) # number of observations
+    data_width = size(new_data, 2)
+    p = data_width - 1 # number of features
+
+    T = 2^(D + 1) - 1 # Maximum number of nodes in the tree of depth D 
+    largest_B = T ÷ 2 # floor function of T/2 - number of branch nodes
+    # T_B, T_L
+
+    # Extract X and y from data
+    X = new_data[:, 1:data_width-1]
+    # Normalize x
+    for i = 1:size(X,1)
+        X[i,:] = round.(X[i,:]/sum(X[i,:]), digits = max_digits)
+    end
+    #X= [X[1,:]'; X[51,:]']
+
+    y = new_data[:, data_width]
+    #y = [y[1], y[51]]
+    return X,y,n,p,T,largest_B 
+end 
+
+X,y,n,p,T,largest_B = data_generation(data_mat, "reduced")
+
 
 # Dictionary, class labels to frequencies (works only for string names of labels)
 dict_names_freqs = countmap(y)
@@ -65,8 +89,12 @@ function epsilon_j(j)
     end
 
     nz_x_j_dist = x_j_dist[x_j_dist .> 0] # remove zero distances
+    #nz_x_j_dist = round.(nz_x_j_dist, digits = max_digits ) #trim data
     @show nz_x_j_dist
-    return  findmin(nz_x_j_dist)[1] # find and return minimum dist
+    if !isempty(nz_x_j_dist)
+        return  findmin(nz_x_j_dist)[1]  # find and return minimum dist
+    else return 0
+    end
 end
 
 # epsilon and epsilon_min
@@ -130,6 +158,7 @@ end
 
 
 function formulation(X,y) 
+    eps_min = 0.01
 
     model = Model(HiGHS.Optimizer)
 
@@ -146,7 +175,7 @@ function formulation(X,y)
     @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it - the indicator to track points assigned to each leaf node ( point i is at the node t => z_it = 1)
 
 
-    #@variable(model, C)                             # C    
+    @variable(model, C)                             # C    
 
     @variable(model, N_t[(largest_B+1):T])          # N_t - total number of points at leaf node t
 
@@ -184,12 +213,13 @@ function formulation(X,y)
             @constraint(model, [i = 1:n, m in t_A_r], sum(a[:, m].* X[i, :]) >= b[m] - (1  - z[i,t]))
         end
         if !isempty(t_A_l)
-            @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon)) <= b[m] + (1 + maximum(epsilon))*(1 - z[i,t]))
+            @show  t_A_l
+            @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon .- eps_min)) + eps_min <= b[m] + (1 + maximum(epsilon))*(1 - z[i,t]))
         end
     end
 
     # C == sum(d_t)
-    #@constraint(model, C == sum(d[t] for t in 1:largest_B))
+    @constraint(model, C == sum(d[t] for t in 1:largest_B))
 
     # sum(c_kt) == l_t
     @constraint(model, [t = (largest_B+1):T], sum(c[k,t] for k in 1:K) == l[t])
@@ -198,19 +228,24 @@ function formulation(X,y)
     @constraint(model, [t = (largest_B+1):T], N_t[t] == sum(z[i,t] for i in 1:n))
 
     # N_kt == sum(z_it)
-    #@constraint(model, [t = (largest_B+1):T, k = 1:K], N_kt[k,t] == sum(z[i,t] for i in 1:K if y[i] == k))
+    for k = 1:K
+        ind_y_i_k = findall(x->x==k, y_labels)
+        @show k
+        @show  ind_y_i_k
+        @constraint(model, [t = (largest_B+1):T], N_kt[k,t] == sum(z[i,t] for i in ind_y_i_k ))
+    end
 
     # N_kt == sum(z_it)
-    @constraint(model, [t = (largest_B+1):T, k = 1:K], N_kt[k,t] == 0.5 * sum((1 + Y(i,k,y))*z[i,t] for i in 1:n))
+    #@constraint(model, [t = (largest_B+1):T, k = 1:K], N_kt[k,t] == 0.5 * sum((1 + Y(i,k,y))*z[i,t] for i in 1:n))
 
     # L_t <= N_t - N_kt + n*c_kt
-    @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] <= N_t[t] - N_kt[k,t] + n*c[k,t])
+    @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] <= N_t[t] - N_kt[k,t])
 
     # L_t >= N_t - N_kt - n(1 - c_kt)
     @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] >= N_t[t] - N_kt[k,t] - n*(1 - c[k,t]))
 
     # Objective
-    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*sum(d[t] for t in 1:largest_B))
+    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C)
 
     return model
 end
@@ -218,11 +253,13 @@ end
 
 # Initialize optimization model
 model=formulation(X,y)
+print(model)
 optimize!(model)
 
 value.(model[:a])
 value.(model[:b])
 z_output = Array(value.(model[:z]))
+L_output = Array(value.(model[:L]))
 
 # Trying out CART 
 features, labels = load_data("iris")    # also see "adult" and "digits" datasets
