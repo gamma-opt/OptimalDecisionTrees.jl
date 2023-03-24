@@ -25,7 +25,7 @@ max_digits = 3
 
 
 s = Array(data_mat[[1],:])
-# the function to trim the data to pnly two observations with two different labels if needed (the second parameter then = "reduced")
+# the function to trim the data to only two observations with two different labels if needed (the second parameter then = "reduced")
 # or work with full data (the second parameter is then "full")
 function data_generation(data, new_size)
     if new_size == "reduced"
@@ -47,8 +47,8 @@ function data_generation(data, new_size)
     # Extract X and y from data
     X = new_data[:, 1:data_width-1]
     # Normalize x
-    for i = 1:size(X,1)
-        X[i,:] = round.(X[i,:]/sum(X[i,:]), digits = max_digits)
+    for i = 1:size(X,2)
+        X[:,i] = round.(X[:,i]/maximum(X[:,i]), digits = max_digits)
     end
     #X= [X[1,:]'; X[51,:]']
 
