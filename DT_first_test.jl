@@ -97,12 +97,13 @@ function epsilon_j(j)
     end
 end
 
-# epsilon and epsilon_min
+# epsilon and eps_min and eps_max
 epsilon = zeros(p) # init vector
 for j in 1:p # for all features
     epsilon[j] = epsilon_j(j)
 end
-#epsilon_min = findmin(epsilon)[1]
+eps_min = minimum(epsilon)
+eps_max = maximum(epsilon)
 
 # # R_cursive and L_cursive
 function find_R_cursive(t)
@@ -158,8 +159,6 @@ end
 
 
 function formulation(X,y) 
-    eps_min = 0.01
-
     model = Model(HiGHS.Optimizer)
 
     @variable(model, d[1:largest_B], Bin)           # d_t - indicator whether the split occured at node t (d_t = 1)
@@ -214,7 +213,7 @@ function formulation(X,y)
         end
         if !isempty(t_A_l)
             @show  t_A_l
-            @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon .- eps_min)) + eps_min <= b[m] + (1 + maximum(epsilon))*(1 - z[i,t]))
+            @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon .- eps_min)) + eps_min <= b[m] + (1 + eps_max)*(1 - z[i,t]))
         end
     end
 
