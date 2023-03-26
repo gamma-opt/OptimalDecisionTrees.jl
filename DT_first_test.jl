@@ -57,7 +57,7 @@ function data_generation(data, new_size)
     return X,y,n,p,T,largest_B 
 end 
 
-X,y,n,p,T,largest_B = data_generation(data_mat, "reduced")
+X,y,n,p,T,largest_B = data_generation(data_mat, "full")
 
 
 # Dictionary, class labels to frequencies (works only for string names of labels)
@@ -216,6 +216,28 @@ value.(model[:a])
 value.(model[:b])
 z_output = Array(value.(model[:z]))
 L_output = Array(value.(model[:L]))
+c_output = Array(value.(model[:c]))
+N_kt_output = Array(value.(model[:N_kt]))
+
+# Result type modification for better interpretability
+class_sizes = countmap(y_labels) # dictionary, class label to class size
+dict_class_leaf = Dict{Int64, Int64}() # dictionary, class label to leaf node
+for k in 1:K
+    for t in 1:(largest_B+1)
+        if isapprox(c_output[k, t], 1, atol = 0.1)
+            dict_class_leaf[k] = t
+        end
+    end
+end
+
+# print result
+println("Accuracies:")
+for k in 1:K
+    print("Class "); print(k); print(": "); print(round(Int, N_kt_output[k, dict_class_leaf[k]]))
+    print("/"); println(class_sizes[k])    
+end
+
+
 
 # Trying out CART 
 features, labels = load_data("iris")    # also see "adult" and "digits" datasets
