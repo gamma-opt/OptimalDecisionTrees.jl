@@ -28,7 +28,7 @@ s = Array(data_mat[[1],:])
 # the function to trim the data to only two observations with two different labels if needed (the second parameter then = "reduced")
 # or work with full data (the second parameter is then "full")
 function data_generation(data, new_size)
-    if new_size == "full"
+    if new_size == "reduced"
         new_data = Array{Any}(undef, 2, size(data, 2))
         new_data[1,:] = data[1,:]
         new_data[2,:] = data[51,:]
