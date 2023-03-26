@@ -15,7 +15,7 @@ using DecisionTree
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
 N_min = 2 # Minimum number of points in any leaf node
-alpha = 0.001 # complexity parameter 
+alpha = 0.0001 # complexity parameter 
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -28,7 +28,7 @@ s = Array(data_mat[[1],:])
 # the function to trim the data to only two observations with two different labels if needed (the second parameter then = "reduced")
 # or work with full data (the second parameter is then "full")
 function data_generation(data, new_size)
-    if new_size == "reduced"
+    if new_size == "full"
         new_data = Array{Any}(undef, 2, size(data, 2))
         new_data[1,:] = data[1,:]
         new_data[2,:] = data[51,:]
@@ -68,13 +68,6 @@ dict_labels_names = Dict(value => key for (key, value) in dict_names_labels)
 dict_labels_freqs = Dict(a => dict_names_freqs[b] for (a, b) in dict_labels_names)
 y_labels = [dict_names_labels[y[i]] for i = 1:n]
 
-function Y(i::Int, k::Int, dataset::Vector{Any}) 
-    if dataset[i] == k return 1
-    else return -1
-    end
-end
-
-
 # More constants
 L_hat = maximum(values(dict_labels_freqs)) # Number of points in the most popular class 
 K = length(class_names) # Total number of classes
@@ -104,40 +97,6 @@ for j in 1:p # for all features
 end
 eps_min = minimum(epsilon)
 eps_max = maximum(epsilon)
-
-# # R_cursive and L_cursive
-function find_R_cursive(t)
-    temp_set = Set() # init empty set
-    while t != 1 # when not in root node
-        next_t = t ÷ 2 # calculate parent node
-        if t % 2 == 1 # if node is on right branch..
-            push!(temp_set, next_t) # ..add its parent node to set
-        end
-        t = next_t # update next node (parent node)
-    end
-    return temp_set 
-end
-
-function find_L_cursive(t)
-    temp_set = Set()
-    while t != 1
-        next_t = t ÷ 2
-        if t % 2 == 0 # if node is on left branch
-            push!(temp_set, next_t)
-        end
-        t = next_t
-    end
-    return temp_set
-end
-# calculate R_cursive and L_cursive for all nodes
-R_cursive = Vector{Set{Int}}(undef, T)
-L_cursive = Vector{Set{Int}}(undef, T)
-for f in 1:T
-    R_cursive[f] = find_R_cursive(f)
-    L_cursive[f] = find_L_cursive(f)
-end
-
-
 
 # function to generate set of ancestor node of t who followed left (A_l) and right (A_l) branches from the root node to the node t
 function ancestors_LR(t::Int)
@@ -174,7 +133,7 @@ function formulation(X,y)
     @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it - the indicator to track points assigned to each leaf node ( point i is at the node t => z_it = 1)
 
 
-    @variable(model, C)                             # C    
+    @variable(model, C)                             # C - number of splits included in the tree
 
     @variable(model, N_t[(largest_B+1):T])          # N_t - total number of points at leaf node t
 
@@ -202,17 +161,18 @@ function formulation(X,y)
     # sum(z_it == 1)
     @constraint(model, [i = 1:n], sum(z[i, t] for t in (largest_B+1):T) == 1)
 
-    # a_m*x_i >= b_m - (1 - z_it)
     for t = (largest_B +1):T
         t_A_l, t_A_r = ancestors_LR(t)
-        # a_m*x_i >= b_m - (1 - z_it)
+        
         @show t
         @show t_A_l, t_A_r
         if !isempty(t_A_r)
+            # a_m*x_i >= b_m - (1 - z_it)
             @constraint(model, [i = 1:n, m in t_A_r], sum(a[:, m].* X[i, :]) >= b[m] - (1  - z[i,t]))
         end
         if !isempty(t_A_l)
             @show  t_A_l
+            # a_m^T(x_i + epsilon - eps_min) + eps_min >= b_m + (1 + eps_max)(1 - z_it)
             @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon .- eps_min)) + eps_min <= b[m] + (1 + eps_max)*(1 - z[i,t]))
         end
     end
@@ -233,9 +193,6 @@ function formulation(X,y)
         @show  ind_y_i_k
         @constraint(model, [t = (largest_B+1):T], N_kt[k,t] == sum(z[i,t] for i in ind_y_i_k ))
     end
-
-    # N_kt == sum(z_it)
-    #@constraint(model, [t = (largest_B+1):T, k = 1:K], N_kt[k,t] == 0.5 * sum((1 + Y(i,k,y))*z[i,t] for i in 1:n))
 
     # L_t <= N_t - N_kt + n*c_kt
     @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] <= N_t[t] - N_kt[k,t])
