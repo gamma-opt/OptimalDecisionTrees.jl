@@ -222,18 +222,28 @@ N_kt_output = Array(value.(model[:N_kt]))
 # Result type modification for better interpretability
 class_sizes = countmap(y_labels) # dictionary, class label to class size
 label_sums = zeros(Int, K) # sum of correct classifications for a class
-for k in 1:K
-    for t in 1:(largest_B+1)
-        if isapprox(c_output[k, t], 1, atol = 0.1)
-            label_sums[k] = label_sums[k] + round(Int, N_kt_output[k, t])
+println("Accuracies for every leaf:")
+for t in 1:(largest_B+1)
+    print("Leaf "); print(t); print(": ")
+    if isapprox(sum(c_output[:, t]), 1, atol = 0.1) # if leaf node has data points
+        for k in 1:K
+            if isapprox(c_output[k, t], 1, atol = 0.1) # labelled class for leaf t
+                points = round(Int, N_kt_output[k, t]) # number of data points
+                label_sums[k] = label_sums[k] + points # sum up to gather total number for a class
+                print(points)
+            end
         end
+        print("/"); println(round(Int, sum(z_output[:, t])))
+    else
+        println("empty")
     end
 end
+println()
 
 # print result
-println("Accuracies:")
+println("Accuracies for every label:")
 for k in 1:K
-    print("Class "); print(k); print(": "); print(label_sums[k])  
+    print("Label "); print(k); print(": "); print(label_sums[k])  
     print("/"); println(class_sizes[k])    
 end
 
