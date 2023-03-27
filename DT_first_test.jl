@@ -221,11 +221,11 @@ N_kt_output = Array(value.(model[:N_kt]))
 
 # Result type modification for better interpretability
 class_sizes = countmap(y_labels) # dictionary, class label to class size
-dict_class_leaf = Dict{Int64, Int64}() # dictionary, class label to leaf node
+label_sums = zeros(Int, K) # sum of correct classifications for a class
 for k in 1:K
     for t in 1:(largest_B+1)
         if isapprox(c_output[k, t], 1, atol = 0.1)
-            dict_class_leaf[k] = t
+            label_sums[k] = label_sums[k] + round(Int, N_kt_output[k, t])
         end
     end
 end
@@ -233,7 +233,7 @@ end
 # print result
 println("Accuracies:")
 for k in 1:K
-    print("Class "); print(k); print(": "); print(round(Int, N_kt_output[k, dict_class_leaf[k]]))
+    print("Class "); print(k); print(": "); print(label_sums[k])  
     print("/"); println(class_sizes[k])    
 end
 
