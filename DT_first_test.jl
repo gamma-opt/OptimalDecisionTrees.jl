@@ -15,7 +15,7 @@ using DecisionTree
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
 N_min = 2 # Minimum number of points in any leaf node
-alpha = 0.001 # complexity parameter 
+alpha = 0.0000 # complexity parameter 
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -47,8 +47,8 @@ function data_generation(data, new_size)
     # Extract X and y from data
     X = new_data[:, 1:data_width-1]
     # Normalize x
-    for i = 1:size(X,1)
-        X[i,:] = round.(X[i,:]/sum(X[i,:]), digits = max_digits)
+    for i = 1:size(X,2)
+        X[:,i] = round.(X[:,i]/sum(X[:,i]), digits = max_digits)
     end
     #X= [X[1,:]'; X[51,:]']
 
@@ -57,7 +57,7 @@ function data_generation(data, new_size)
     return X,y,n,p,T,largest_B 
 end 
 
-X,y,n,p,T,largest_B = data_generation(data_mat, "reduced")
+X,y,n,p,T,largest_B = data_generation(data_mat, "full")
 
 
 # Dictionary, class labels to frequencies (works only for string names of labels)
