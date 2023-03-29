@@ -47,8 +47,8 @@ function data_generation(data, new_size)
     # Extract X and y from data
     X = new_data[:, 1:data_width-1]
     # Normalize x
-    for i = 1:size(X,1)
-        X[i,:] = round.((X[i,:] .- minimum(X[i,:]))./(maximum(X[i,:])minimum(X[i,:])), digits = max_digits)
+    for i = 1:size(X,2)
+        X[:,i] = round.((X[:,i] .- minimum(X[:,i]))./(maximum(X[:,i])minimum(X[:,i])), digits = max_digits)
     end
     #X= [X[1,:]'; X[51,:]']
 
