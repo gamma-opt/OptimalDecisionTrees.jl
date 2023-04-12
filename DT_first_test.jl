@@ -265,11 +265,11 @@ labels   = string.(labels)
 # train full-tree classifier
 n_subfeatures=1; max_depth=2; min_samples_leaf=1; min_samples_split=2
 min_purity_increase=0.0; pruning_purity = 1.0; seed=3
-model    =   build_tree(labels, features,
+model2    =   build_tree(labels, features,
                         n_subfeatures,
                         max_depth,
                         min_samples_leaf,
                         min_samples_split,
                         min_purity_increase;
                         rng = seed)
-print_tree(model, 2)
+print_tree(model2, 2)
