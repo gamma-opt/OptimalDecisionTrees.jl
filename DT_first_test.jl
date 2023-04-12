@@ -10,10 +10,12 @@ using HiGHS
 using StatsBase
 using LinearAlgebra
 using DecisionTree
+#using Gurobi
+#using Plots
 
 
 # Hyper-parameters
-D = 2 # Maximum depth of the tree
+D = 1 # Maximum depth of the tree
 N_min = 2 # Minimum number of points in any leaf node
 alpha = 0.0000 # complexity parameter 
 
@@ -48,7 +50,7 @@ function data_generation(data, new_size)
     X = new_data[:, 1:data_width-1]
     # Normalize x
     for i = 1:size(X,2)
-        X[:,i] = round.((X[:,i] .- minimum(X[:,i]))./(maximum(X[:,i])minimum(X[:,i])), digits = max_digits)
+        X[:,i] = round.((X[:,i] .- minimum(X[:,i]))./(maximum(X[:,i])-minimum(X[:,i])), digits = max_digits)
     end
     #X= [X[1,:]'; X[51,:]']
 
@@ -78,7 +80,7 @@ function epsilon_j(j)
     x_j_dist = zeros(length(x_j) - 1) # init vector for distances
 
     for i in eachindex(x_j_dist) # calculate distances between sorted x_j's
-        x_j_dist[i] = x_j[i] - x_j[i + 1] # this is different than in the book!!! i and i+1 swapped
+        x_j_dist[i] = x_j[i] - x_j[i + 1] # this is different than in the book!!! i and i+1 swapped. Rounding here?
     end
 
     nz_x_j_dist = x_j_dist[x_j_dist .> 0] # remove zero distances
@@ -95,7 +97,7 @@ epsilon = zeros(p) # init vector
 for j in 1:p # for all features
     epsilon[j] = epsilon_j(j)
 end
-eps_min = minimum(epsilon)
+eps_min = minimum(epsilon) # Rounding here?
 eps_max = maximum(epsilon)
 
 # function to generate set of ancestor node of t who followed left (A_l) and right (A_l) branches from the root node to the node t
@@ -119,6 +121,7 @@ end
 
 function formulation(X,y) 
     model = Model(HiGHS.Optimizer)
+    #model = Model(Gurobi.Optimizer)
 
     @variable(model, d[1:largest_B], Bin)           # d_t - indicator whether the split occured at node t (d_t = 1)
 
