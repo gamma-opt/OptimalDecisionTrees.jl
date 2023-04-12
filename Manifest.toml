@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.8.5"
+julia_version = "1.8.4"
 manifest_format = "2.0"
-project_hash = "564eebbcc1274ab2a00c03da54a3a321e5e3fcce"
+project_hash = "185becf4c355a814fb9052ecffc87a5c82aefff0"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "faa260e4cb5aba097a73fab382dd4b5819d8ec8c"
@@ -167,6 +167,12 @@ version = "0.10.35"
 deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
+[[deps.Gurobi]]
+deps = ["LazyArtifacts", "Libdl", "MathOptInterface"]
+git-tree-sha1 = "e180bacdea78d73a60841b796a9150460856a3df"
+uuid = "2e9cd046-0924-5485-92f1-d5272153d98b"
+version = "1.0.0"
+
 [[deps.HiGHS]]
 deps = ["HiGHS_jll", "MathOptInterface", "SnoopPrecompile", "SparseArrays"]
 git-tree-sha1 = "218ffc6232c5d590b595d8a087a50e2ccbf5a9ac"
@@ -232,6 +238,10 @@ version = "1.8.2"
 git-tree-sha1 = "f2355693d6778a178ade15952b7ac47a4ff97996"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 version = "1.3.0"
+
+[[deps.LazyArtifacts]]
+deps = ["Artifacts", "Pkg"]
+uuid = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]

@@ -10,7 +10,7 @@ using HiGHS
 using StatsBase
 using LinearAlgebra
 using DecisionTree
-#using Gurobi
+using Gurobi
 #using Plots
 
 
@@ -120,8 +120,8 @@ end
 
 
 function formulation(X,y) 
-    model = Model(HiGHS.Optimizer)
-    #model = Model(Gurobi.Optimizer)
+    #model = Model(HiGHS.Optimizer)
+    model = Model(Gurobi.Optimizer)
 
     @variable(model, d[1:largest_B], Bin)           # d_t - indicator whether the split occured at node t (d_t = 1)
 
