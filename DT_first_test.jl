@@ -11,18 +11,13 @@ using StatsBase
 using LinearAlgebra
 using DecisionTree
 using Gurobi
-using Test
-#using Plots
-
-@testset "SomeTest" begin
-    @test 1+2 == 3
-end
+#using Test
 
 
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
 N_min = 2 # Minimum number of points in any leaf node
-alpha = 0.5 # complexity parameter 
+alpha = 0.01 # complexity parameter 
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -31,7 +26,6 @@ data_mat = Matrix(data_df) # convert from df to matrix
 max_digits = 3
 
 
-s = Array(data_mat[[1],:])
 # the function to trim the data to only two observations with two different labels if needed (the second parameter then = "reduced")
 # or work with full data (the second parameter is then "full")
 function data_generation(data, new_size)
@@ -176,12 +170,12 @@ function formulation(X,y)
         @show t_A_l, t_A_r
         if !isempty(t_A_r)
             # a_m*x_i >= b_m - (1 - z_it)
-            @constraint(model, [i = 1:n, m in t_A_r], sum(a[:, m].* X[i, :]) >= b[m] - (1  - z[i,t]))
+            @constraint(model, [i = 1:n, m in t_A_r], map_coefficients_inplace!(a -> round(a, digits=3), sum(a[:, m].* X[i, :]) - b[m] + (1  - z[i,t])) >= 0)
         end
         if !isempty(t_A_l)
             @show  t_A_l
             # a_m^T(x_i + epsilon - eps_min) + eps_min >= b_m + (1 + eps_max)(1 - z_it)
-            @constraint(model, [i = 1:n, m in t_A_l], sum(a[:, m].* (X[i, :] .+ epsilon .- eps_min)) + eps_min <= b[m] + (1 + eps_max)*(1 - z[i,t]))
+            @constraint(model, [i = 1:n, m in t_A_l], map_coefficients_inplace!(a -> round(a, digits=3), sum(a[:, m].* (X[i, :] .+ epsilon .- eps_min)) + eps_min - b[m] - (1 + eps_max)*(1 - z[i,t])) <= 0)
         end
     end
 
@@ -214,17 +208,6 @@ function formulation(X,y)
     return model
 end
 
-n_subfeatures=1; max_depth=2; min_samples_leaf=1; min_samples_split=2
-min_purity_increase=0.0; pruning_purity = 1.0; seed=3
-model2    =   build_tree(labels, features,
-                        n_subfeatures,
-                        max_depth,
-                        min_samples_leaf,
-                        min_samples_split,
-                        min_purity_increase;
-                        rng = seed)
-print_tree(model2, 2)
-struc = model2.tree
 
 # Initialize optimization model
 model=formulation(X,y)
@@ -290,5 +273,3 @@ model2    =   build_tree(labels, features,
                         min_purity_increase;
                         rng = seed)
 print_tree(model2, 2)
-split_importance(model2)
-tree.plot_tree(model2)
