@@ -11,13 +11,18 @@ using StatsBase
 using LinearAlgebra
 using DecisionTree
 using Gurobi
+using Test
 #using Plots
+
+@testset "SomeTest" begin
+    @test 1+2 == 3
+end
 
 
 # Hyper-parameters
-D = 1 # Maximum depth of the tree
+D = 2 # Maximum depth of the tree
 N_min = 2 # Minimum number of points in any leaf node
-alpha = 0.0000 # complexity parameter 
+alpha = 0.5 # complexity parameter 
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -209,14 +214,25 @@ function formulation(X,y)
     return model
 end
 
+n_subfeatures=1; max_depth=2; min_samples_leaf=1; min_samples_split=2
+min_purity_increase=0.0; pruning_purity = 1.0; seed=3
+model2    =   build_tree(labels, features,
+                        n_subfeatures,
+                        max_depth,
+                        min_samples_leaf,
+                        min_samples_split,
+                        min_purity_increase;
+                        rng = seed)
+print_tree(model2, 2)
+struc = model2.tree
 
 # Initialize optimization model
 model=formulation(X,y)
 print(model)
 optimize!(model)
 
-value.(model[:a])
-value.(model[:b])
+a = value.(model[:a])
+b = value.(model[:b])
 z_output = Array(value.(model[:z]))
 L_output = Array(value.(model[:L]))
 c_output = Array(value.(model[:c]))
@@ -250,6 +266,7 @@ function res_analysis()
         print("Label "); print(k); print(": "); print(label_sums[k])  
         print("/"); println(class_sizes[k])    
     end
+    println()
 end
 
 res_analysis()
@@ -273,3 +290,5 @@ model2    =   build_tree(labels, features,
                         min_purity_increase;
                         rng = seed)
 print_tree(model2, 2)
+split_importance(model2)
+tree.plot_tree(model2)
