@@ -96,7 +96,7 @@ epsilon = zeros(p) # init vector
 for j in 1:p # for all features
     epsilon[j] = epsilon_j(j)
 end
-eps_min = minimum(epsilon) # Rounding here?
+eps_min = minimum(epsilon)
 eps_max = maximum(epsilon)
 
 # function to generate set of ancestor node of t who followed left (A_l) and right (A_l) branches from the root node to the node t
@@ -209,6 +209,47 @@ function formulation(X,y)
 end
 
 
+# CART
+n_subfeatures=1; max_depth=D; min_samples_leaf=N_min; min_samples_split=N_min
+min_purity_increase=0.0; pruning_purity = 1.0; seed=3
+model2    =   build_tree(y_labels, X,
+                        n_subfeatures,
+                        max_depth,
+                        min_samples_leaf,
+                        min_samples_split,
+                        min_purity_increase;
+                        rng = seed)
+print_tree(model2, D)
+
+# Extract nodes from CART output
+nd = Vector{Any}(undef, T)
+nd[1] = model2.node
+
+for i in 1:largest_B # go trough every branch node
+    if(nd[i] != 0)
+        if(typeof(nd[i]) != Leaf{Int64}) # if is branch node in CART
+            nd[i*2] = nd[i].left # assign childs
+            nd[i*2 + 1] = nd[i].right
+        else # else assign 0
+            nd[i*2] = 0
+            nd[i*2 + 1] = 0
+        end
+    else
+        nd[i*2] = 0
+        nd[i*2 + 1] = 0
+    end
+end
+
+for i in 1:T
+    println(nd[i])
+end
+
+# Tree visualized below, branch=b, leaf=l
+#   b
+# l   b
+#    l l
+
+
 # Initialize optimization model
 model=formulation(X,y)
 print(model)
@@ -253,23 +294,3 @@ function res_analysis()
 end
 
 res_analysis()
-
-
-# Trying out CART 
-features, labels = load_data("iris")    # also see "adult" and "digits" datasets
-
-# the data loaded are of type Array{Any}
-# cast them to concrete types for better performance
-features = float.(features)
-labels   = string.(labels)
-# train full-tree classifier
-n_subfeatures=1; max_depth=2; min_samples_leaf=1; min_samples_split=2
-min_purity_increase=0.0; pruning_purity = 1.0; seed=3
-model2    =   build_tree(labels, features,
-                        n_subfeatures,
-                        max_depth,
-                        min_samples_leaf,
-                        min_samples_split,
-                        min_purity_increase;
-                        rng = seed)
-print_tree(model2, 2)
