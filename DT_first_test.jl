@@ -17,7 +17,8 @@ using Gurobi
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
 N_min = 2 # Minimum number of points in any leaf node
-alpha = 0.01 # complexity parameter 
+# alpha = 0.01 # ORIGINAL complexity parameter 
+C = 2 # FIXED AMOUNT SPLITS
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -135,7 +136,7 @@ function formulation(X,y)
     @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it - the indicator to track points assigned to each leaf node ( point i is at the node t => z_it = 1)
 
 
-    @variable(model, C)                             # C - number of splits included in the tree
+    # @variable(model, C) ORIGINAL                           # C - number of splits included in the tree
 
     @variable(model, N_t[(largest_B+1):T])          # N_t - total number of points at leaf node t
 
@@ -180,7 +181,8 @@ function formulation(X,y)
     end
 
     # C == sum(d_t)
-    @constraint(model, C == sum(d[t] for t in 1:largest_B))
+    # @constraint(model, C == sum(d[t] for t in 1:largest_B)) # ORIGINAL
+    @constraint(model, sum(d[t] for t in 1:largest_B) <= C) # FIXED AMOUNT SPLITS
 
     # sum(c_kt) == l_t
     @constraint(model, [t = (largest_B+1):T], sum(c[k,t] for k in 1:K) == l[t])
@@ -203,7 +205,8 @@ function formulation(X,y)
     @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] >= N_t[t] - N_kt[k,t] - n*(1 - c[k,t]))
 
     # Objective
-    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C)
+    # @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C) # ORIGINAL
+    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T)) # FIXED AMOUNT SPLITS
 
     return model
 end
