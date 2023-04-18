@@ -18,7 +18,7 @@ using Gurobi
 D = 2 # Maximum depth of the tree
 N_min = 2 # Minimum number of points in any leaf node
 # alpha = 0.01 # ORIGINAL complexity parameter 
-C = 2 # FIXED AMOUNT SPLITS
+C = round(Int, 0.8*((2^(D + 1) - 1)÷2)) # FIXED AMOUNT SPLITS
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
