@@ -14,7 +14,7 @@ using Gurobi
 #using Test
 
 N_min_perc = 0.05
-C_perc = 0.8
+C_perc = 0.8 # FIXED AMOUNT SPLITS
 
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
@@ -216,7 +216,7 @@ end
 
 # Initialize optimization model
 model=formulation(X,y)
-print(model)
+#print(model)
 optimize!(model)
 
 a = value.(model[:a])
@@ -262,7 +262,7 @@ end
 
 # CART
 println("CART:")
-n_subfeatures=1; max_depth=D; min_samples_leaf=N_min; min_samples_split=N_min+1
+n_subfeatures=1; max_depth=D; min_samples_leaf=N_min; min_samples_split=max(2,N_min)
 min_purity_increase=0.0; pruning_purity = 1.0; seed=3
 model2    =   build_tree(y_labels, X,
                         n_subfeatures,
