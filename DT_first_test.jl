@@ -13,12 +13,14 @@ using DecisionTree
 using Gurobi
 #using Test
 
+N_min_perc = 0.05
+C_perc = 0.8
 
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
-N_min = 2 # Minimum number of points in any leaf node
+N_min = round(Int, N_min_perc*n) # Minimum number of points in any leaf node
 # alpha = 0.01 # ORIGINAL complexity parameter 
-C = round(Int, 0.8*((2^(D + 1) - 1)÷2)) # FIXED AMOUNT SPLITS
+C = round(Int, C_perc*((2^(D + 1) - 1)÷2)) # FIXED AMOUNT SPLITS
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -136,7 +138,7 @@ function formulation(X,y)
     @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it - the indicator to track points assigned to each leaf node ( point i is at the node t => z_it = 1)
 
 
-    # @variable(model, C) ORIGINAL                           # C - number of splits included in the tree
+    # @variable(model, C) # ORIGINAL                           # C - number of splits included in the tree
 
     @variable(model, N_t[(largest_B+1):T])          # N_t - total number of points at leaf node t
 
@@ -212,47 +214,6 @@ function formulation(X,y)
 end
 
 
-# CART
-n_subfeatures=1; max_depth=D; min_samples_leaf=N_min; min_samples_split=N_min
-min_purity_increase=0.0; pruning_purity = 1.0; seed=3
-model2    =   build_tree(y_labels, X,
-                        n_subfeatures,
-                        max_depth,
-                        min_samples_leaf,
-                        min_samples_split,
-                        min_purity_increase;
-                        rng = seed)
-print_tree(model2, D)
-
-# Extract nodes from CART output
-nd = Vector{Any}(undef, T)
-nd[1] = model2.node
-
-for i in 1:largest_B # go trough every branch node
-    if(nd[i] != 0)
-        if(typeof(nd[i]) != Leaf{Int64}) # if is branch node in CART
-            nd[i*2] = nd[i].left # assign childs
-            nd[i*2 + 1] = nd[i].right
-        else # else assign 0
-            nd[i*2] = 0
-            nd[i*2 + 1] = 0
-        end
-    else
-        nd[i*2] = 0
-        nd[i*2 + 1] = 0
-    end
-end
-
-for i in 1:T
-    println(nd[i])
-end
-
-# Tree visualized below, branch=b, leaf=l
-#   b
-# l   b
-#    l l
-
-
 # Initialize optimization model
 model=formulation(X,y)
 print(model)
@@ -294,6 +255,42 @@ function res_analysis()
         print("/"); println(class_sizes[k])    
     end
     println()
+    println("Overall accuracy:")
+    println(sum(label_sums)/n)
+    println()
 end
 
+# CART
+println("CART:")
+n_subfeatures=1; max_depth=D; min_samples_leaf=N_min; min_samples_split=N_min+1
+min_purity_increase=0.0; pruning_purity = 1.0; seed=3
+model2    =   build_tree(y_labels, X,
+                        n_subfeatures,
+                        max_depth,
+                        min_samples_leaf,
+                        min_samples_split,
+                        min_purity_increase;
+                        rng = seed)
+print_tree(model2, D)
+println()
+
 res_analysis()
+
+# Extract nodes from CART output
+nd = Vector{Any}(undef, T)
+nd[1] = model2.node
+
+for i in 1:largest_B # go trough every branch node
+    if(nd[i] != 0)
+        if(typeof(nd[i]) != Leaf{Int64}) # if is branch node in CART
+            nd[i*2] = nd[i].left # assign childs
+            nd[i*2 + 1] = nd[i].right
+        else # else assign 0
+            nd[i*2] = 0
+            nd[i*2 + 1] = 0
+        end
+    else
+        nd[i*2] = 0
+        nd[i*2 + 1] = 0
+    end
+end
