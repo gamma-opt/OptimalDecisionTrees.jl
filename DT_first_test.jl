@@ -18,7 +18,6 @@ C_perc = 0.8 # FIXED AMOUNT SPLITS
 
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
-N_min = round(Int, N_min_perc*n) # Minimum number of points in any leaf node
 # alpha = 0.01 # ORIGINAL complexity parameter 
 C = round(Int, C_perc*((2^(D + 1) - 1)÷2)) # FIXED AMOUNT SPLITS
 
@@ -62,6 +61,7 @@ function data_generation(data, new_size)
 end 
 
 X,y,n,p,T,largest_B = data_generation(data_mat, "full")
+N_min = round(Int, N_min_perc*n) # Minimum number of points in any leaf node
 
 
 # Dictionary, class labels to frequencies (works only for string names of labels)
