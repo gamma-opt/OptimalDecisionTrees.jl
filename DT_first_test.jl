@@ -18,13 +18,12 @@ mode = 2
 # 2 = Complexity parameter with CART warm start
 # 3 = Fixed number of splits
 
-
-N_min_perc = 0.1 # Percentage of N_min from all data points
-C_perc = 0.8 # Percentage of splits from all possible
-
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
 alpha = 0.0 # Complexity parameter
+N_min_perc = 0.1 # Percentage of N_min from all data points
+
+C_perc = 0.8 # Percentage of splits from all possible (for mode == 3)
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -129,7 +128,7 @@ function ancestors_LR(t::Int)
 end
 
 
-function formulation(X,y, a_s, d_s, z_s, l_s, c_s) 
+function formulation(X, a_s, d_s, z_s, l_s, c_s) 
     model = Model(Gurobi.Optimizer)
 
     @variable(model, d[1:largest_B], Bin)           # d_t - indicator whether the split occured at node t (d_t = 1)
@@ -147,7 +146,7 @@ function formulation(X,y, a_s, d_s, z_s, l_s, c_s)
 
     @variable(model, C)                             # C - number of splits included in the tree
     if mode == 3 # If fixed num of splits
-        fix(C, C_perc*largest_B)
+        fix(C, C_perc*largest_B) # Fix C 
     end
 
     @variable(model, N_t[(largest_B+1):T])          # N_t - total number of points at leaf node t
@@ -208,8 +207,6 @@ function formulation(X,y, a_s, d_s, z_s, l_s, c_s)
     # N_kt == sum(z_it)
     for k = 1:K
         ind_y_i_k = findall(x->x==k, y_labels)
-        @show k
-        @show  ind_y_i_k
         @constraint(model, [t = (largest_B+1):T], N_kt[k,t] == sum(z[i,t] for i in ind_y_i_k ))
     end
 
@@ -344,7 +341,7 @@ C2 = 2
 
 
 # Initialize optimization model
-model=formulation(X,y, a2, d2, z_cart, l2, c2)
+model=formulation(X, a2, d2, z_cart, l2, c2)
 #print(model)
 optimize!(model)
 
