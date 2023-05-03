@@ -11,15 +11,24 @@ using StatsBase
 using LinearAlgebra
 using DecisionTree
 using Gurobi
-#using Test
 
-N_min_perc = 0.05
-C_perc = 0.8 # FIXED AMOUNT SPLITS
+# Mode of optimization
+mode = 2
+# 1 = Complexity parameter
+# 2 = Complexity parameter with CART warm start
+# 3 = Fixed number of splits
+
+
+N_min_perc = 0.1 # Percentage of N_min from all data points
+C_perc = 0.8 # Percentage of splits from all possible
 
 # Hyper-parameters
 D = 2 # Maximum depth of the tree
-# alpha = 0.01 # ORIGINAL complexity parameter 
-C = round(Int, C_perc*((2^(D + 1) - 1)÷2)) # FIXED AMOUNT SPLITS
+alpha = 0.0 # Complexity parameter
+
+if mode == 3
+    C = round(Int, C_perc*((2^(D + 1) - 1)÷2)) # Number of splits
+end
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
@@ -85,6 +94,9 @@ function epsilon_j(j)
         x_j_dist[i] = x_j[i] - x_j[i + 1] # this is different than in the book!!! i and i+1 swapped. Rounding here?
     end
 
+    # rounding to prevent errors in comparing
+    x_j_dist = round.(x_j_dist, digits = max_digits)
+
     nz_x_j_dist = x_j_dist[x_j_dist .> 0] # remove zero distances
     #nz_x_j_dist = round.(nz_x_j_dist, digits = max_digits ) #trim data
     @show nz_x_j_dist
@@ -121,7 +133,7 @@ function ancestors_LR(t::Int)
 end
 
 
-function formulation(X,y) 
+function formulation(X,y, a_s, b_s, d_s, z_s, l_s, c_s, N_t_s, N_kt_s, L_s, C_s) 
     #model = Model(HiGHS.Optimizer)
     model = Model(Gurobi.Optimizer)
 
@@ -138,7 +150,7 @@ function formulation(X,y)
     @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it - the indicator to track points assigned to each leaf node ( point i is at the node t => z_it = 1)
 
 
-    # @variable(model, C) # ORIGINAL                           # C - number of splits included in the tree
+    @variable(model, C) # ORIGINAL                           # C - number of splits included in the tree
 
     @variable(model, N_t[(largest_B+1):T])          # N_t - total number of points at leaf node t
 
@@ -183,8 +195,8 @@ function formulation(X,y)
     end
 
     # C == sum(d_t)
-    # @constraint(model, C == sum(d[t] for t in 1:largest_B)) # ORIGINAL
-    @constraint(model, sum(d[t] for t in 1:largest_B) <= C) # FIXED AMOUNT SPLITS
+    @constraint(model, C == sum(d[t] for t in 1:largest_B)) # ORIGINAL
+    # @constraint(model, sum(d[t] for t in 1:largest_B) <= C) # FIXED AMOUNT SPLITS
 
     # sum(c_kt) == l_t
     @constraint(model, [t = (largest_B+1):T], sum(c[k,t] for k in 1:K) == l[t])
@@ -207,20 +219,138 @@ function formulation(X,y)
     @constraint(model, [t = (largest_B+1):T, k = 1:K], L[t] >= N_t[t] - N_kt[k,t] - n*(1 - c[k,t]))
 
     # Objective
-    # @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C) # ORIGINAL
-    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T)) # FIXED AMOUNT SPLITS
+    @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T) + alpha*C) # ORIGINAL
+    # @objective(model, Min, (1/L_hat) * sum(L[t] for t in (largest_B+1):T)) # FIXED AMOUNT SPLITS
+
+    set_start_value.(a, a_s)
+    #set_start_value.(b, b_s) # f
+    set_start_value.(d, d_s)
+    set_start_value.(z, z_s)
+    set_start_value.(l, l_s)
+    set_start_value.(c, c_s)
+    #set_start_value.(N_t, N_t_s) # f
+    #set_start_value.(N_kt, N_kt_s) # f
+    #set_start_value.(L, L_s) # f
+    #set_start_value(C, C_s) # f
+
 
     return model
 end
 
+# CART
+println("CART:")
+n_subfeatures=1; max_depth=D; min_samples_leaf=N_min; min_samples_split=max(2,N_min)
+min_purity_increase=0.0; pruning_purity = 1.0; seed=3
+model2    =   build_tree(y_labels, X,
+                        n_subfeatures,
+                        max_depth,
+                        min_samples_leaf,
+                        min_samples_split,
+                        min_purity_increase;
+                        rng = seed)
+print_tree(model2, D)
+println()
+
+
+
+# Extract nodes from CART output
+nd = Vector{Any}(undef, T)
+nd[1] = model2.node
+
+a2 = zeros(p, largest_B)
+b2 = zeros(largest_B)
+d2 = zeros(largest_B)
+
+
+for i in 1:largest_B # go trough every branch node
+    if(typeof(nd[i]) == Node{Any, Int64}) # if is branch node in CART
+        nd[i*2] = nd[i].left # assign childs
+        nd[i*2 + 1] = nd[i].right
+
+        a2[nd[i].featid, i] = 1 # set splitting feature
+        b2[i] = nd[i].featval # set splitting value
+        d2[i] = 1 # set split bool
+    else # else assign 0
+        nd[i*2] = 0
+        nd[i*2 + 1] = 0
+    end
+end
+
+preds = apply_tree(model2, X)
+z_cart = zeros(150,4)
+
+println("Misclassified data points:")
+for i in 1:50
+    if(preds[i] == 1) 
+        z_cart[i,2] = 1
+    else 
+        println(i)
+    end
+end
+
+for i in 51:100
+    if(preds[i] == 2) 
+        z_cart[i,3] = 1
+    else
+        println(i)
+    end
+end
+
+for i in 101:150
+    if(preds[i] == 3) 
+        z_cart[i,4] = 1
+    else
+        println(i)
+    end
+end
+
+# 53 = 3
+z_cart[53, 4] = 1
+# 71 = 3 
+z_cart[71, 4] = 1
+# 73 = 3
+z_cart[73, 4] = 1
+# 77 = 3
+z_cart[77, 4] = 1
+# 78 = 3
+z_cart[78, 4] = 1
+# 84 = 3
+z_cart[84, 4] = 1
+# 107= 2
+z_cart[107, 3] = 1
+
+
+
+l2 = [0, 1, 1, 1] # MODIFY
+
+c2 = zeros(3, 4)
+c2[1, 2] = 1 # MODIFY
+c2[2, 3] = 1 # MODIFY
+c2[3, 4] = 1 # MODIFY
+
+N_t2 = [0, 50, 45, 55] # MODIFY
+
+N_kt2 = zeros(3, 4)
+N_kt2[1,2] = 50 # MODIFY
+N_kt2[2,3] = 44 # MODIFY
+N_kt2[3,4] = 49 # MODIFY + misclassifieds
+
+N_kt2[2,4] = 6 #
+N_kt2[3,3] = 1 # 
+
+L2 = [0, 0, 1, 6] # MODIFY
+
+C2 = 2
+
 
 # Initialize optimization model
-model=formulation(X,y)
+model=formulation(X,y, a2, b2, d2, z_cart, l2, c2, N_t2, N_kt2, L2, C2)
 #print(model)
 optimize!(model)
 
 a = value.(model[:a])
 b = value.(model[:b])
+d = value.(model[:d])
 z_output = Array(value.(model[:z]))
 L_output = Array(value.(model[:L]))
 c_output = Array(value.(model[:c]))
@@ -260,37 +390,4 @@ function res_analysis()
     println()
 end
 
-# CART
-println("CART:")
-n_subfeatures=1; max_depth=D; min_samples_leaf=N_min; min_samples_split=max(2,N_min)
-min_purity_increase=0.0; pruning_purity = 1.0; seed=3
-model2    =   build_tree(y_labels, X,
-                        n_subfeatures,
-                        max_depth,
-                        min_samples_leaf,
-                        min_samples_split,
-                        min_purity_increase;
-                        rng = seed)
-print_tree(model2, D)
-println()
-
 res_analysis()
-
-# Extract nodes from CART output
-nd = Vector{Any}(undef, T)
-nd[1] = model2.node
-
-for i in 1:largest_B # go trough every branch node
-    if(nd[i] != 0)
-        if(typeof(nd[i]) != Leaf{Int64}) # if is branch node in CART
-            nd[i*2] = nd[i].left # assign childs
-            nd[i*2 + 1] = nd[i].right
-        else # else assign 0
-            nd[i*2] = 0
-            nd[i*2 + 1] = 0
-        end
-    else
-        nd[i*2] = 0
-        nd[i*2 + 1] = 0
-    end
-end
