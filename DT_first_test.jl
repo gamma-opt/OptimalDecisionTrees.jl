@@ -19,15 +19,14 @@ mode = 2
 # 3 = Fixed number of splits
 
 # Hyper-parameters
-D = 2 # Maximum depth of the tree
-alpha = 0.0 # Complexity parameter
+D = 3 # Maximum depth of the tree
+alpha = 0.9 # Complexity parameter
 N_min_perc = 0.1 # Percentage of N_min from all data points
 
 C_perc = 0.8 # Percentage of splits from all possible (for mode == 3)
 
 # Data
 data_df = CSV.read("iris_data.csv", header=false, DataFrame)
-println(data_df)
 data_mat = Matrix(data_df) # convert from df to matrix
 max_digits = 3
 
@@ -176,14 +175,11 @@ function formulation(X, a_s, d_s, z_s, l_s, c_s)
     for t = (largest_B +1):T
         t_A_l, t_A_r = ancestors_LR(t)
         
-        @show t
-        @show t_A_l, t_A_r
         if !isempty(t_A_r)
             # a_m*x_i >= b_m - (1 - z_it)
             @constraint(model, [i = 1:n, m in t_A_r], map_coefficients_inplace!(a -> round(a, digits=3), sum(a[:, m].* X[i, :]) - b[m] + (1  - z[i,t])) >= 0)
         end
         if !isempty(t_A_l)
-            @show  t_A_l
             # a_m^T(x_i + epsilon - eps_min) + eps_min >= b_m + (1 + eps_max)(1 - z_it)
             @constraint(model, [i = 1:n, m in t_A_l], map_coefficients_inplace!(a -> round(a, digits=3), sum(a[:, m].* (X[i, :] .+ epsilon .- eps_min)) + eps_min - b[m] - (1 + eps_max)*(1 - z[i,t])) <= 0)
         end
@@ -279,23 +275,21 @@ X_ind = hcat(X, 1:150)
 br3 = X_ind[X_ind[:, 3] .>= 0.246, :]
 br6 = br3[br3[:, 3] .< 0.6355, :]
 br7 = br3[br3[:, 3] .>= 0.6355, :]
-le5 = br6[br6[:, 4] .< 0.5625, :]
-le6 = br6[br6[:, 4] .>= 0.5625, :]
-le7 = br7[br7[:, 4] .< 0.6875, :]
-le8 = br7[br7[:, 4] .>= 0.6875, :]
+le5 = br6[br6[:, 4] .< 0.521, :]
+le6 = br6[br6[:, 4] .>= 0.521, :]
+le7 = br7[br7[:, 4] .< 0.729, :]
+le8 = br7[br7[:, 4] .>= 0.729, :]
 
 le5ind = le5[:, 5]
 
-le6mod = le6[1:10, 5]
-le6mis = le6[11, 5]
+le6mod = le6[1:16, 5]
+le6mis = le6[17, 5]
 le6ind = le6[:, 5]
 
-le7mod = le7[1:5, 5]
-le7mod = le7[6:9, 5]
+le7mod = le7[7:21, 5]
+le7mod = le7[1:6, 5]
 le7ind = le7[:, 5]
 
-le8mod = le8[2:46, 5]
-le8mis = le8[1, 5]
 le8ind = le8[:, 5]
 
 z_cart[1:50, 4] .= 1
@@ -304,15 +298,15 @@ z_cart[le6ind, 6] .= 1
 z_cart[le7ind, 7] .= 1
 z_cart[le8ind, 8] .= 1
 
-l2 = [0, 0, 0, 1, 1, 1, 1, 1]
+l2 = [0, 0, 0, 1, 1, 1, 1, 1] # which leaf nodes have points
 
 c2 = zeros(3, 8) # set zeros
 c2[1, 4] = 1 
 
 c2[2, 5] = 1 
 c2[2, 6] = 1 
-c2[2, 7] = 1 
 
+c2[3, 7] = 1 
 c2[3, 8] = 1 
 
 # Initialize optimization model
