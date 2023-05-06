@@ -93,8 +93,6 @@ function epsilon_j(j)
     x_j_dist = round.(x_j_dist, digits = max_digits)
 
     nz_x_j_dist = x_j_dist[x_j_dist .> 0] # remove zero distances
-    #nz_x_j_dist = round.(nz_x_j_dist, digits = max_digits ) #trim data
-    @show nz_x_j_dist
     if !isempty(nz_x_j_dist)
         return  findmin(nz_x_j_dist)[1]  # find and return minimum dist
     else return 0
@@ -139,14 +137,14 @@ function formulation(X, a_s, d_s, z_s, l_s, c_s)
 
     @variable(model, c[1:K, (largest_B+1):T], Bin)  # c_kt - predicition of each leaf node, i.e., c_kt = 1 => the node t has more points of class k
 
-    @variable(model, l[(largest_B+1):T], Bin)       # l_t  - indicator whther leaf t contains any points => l_t = 1
+    @variable(model, l[(largest_B+1):T], Bin)       # l_t  - indicator whether leaf t contains any points => l_t = 1
 
     @variable(model, z[1:n, (largest_B+1):T], Bin)  # z_it - the indicator to track points assigned to each leaf node ( point i is at the node t => z_it = 1)
 
 
     @variable(model, C)                             # C - number of splits included in the tree
     if mode == 3 # If fixed num of splits
-        fix(C, C_perc*largest_B) # Fix C 
+        fix(C, round(Int, C_perc*largest_B)) # Fix C 
     end
 
     @variable(model, N_t[(largest_B+1):T])          # N_t - total number of points at leaf node t
@@ -272,73 +270,50 @@ for i in 1:largest_B # go trough every branch node
 end
 
 preds = apply_tree(model2, X)
-z_cart = zeros(150,4)
-
-println("Misclassified data points:")
-for i in 1:50
-    if(preds[i] == 1) 
-        z_cart[i,2] = 1
-    else 
-        println(i)
-    end
-end
-
-for i in 51:100
-    if(preds[i] == 2) 
-        z_cart[i,3] = 1
-    else
-        println(i)
-    end
-end
-
-for i in 101:150
-    if(preds[i] == 3) 
-        z_cart[i,4] = 1
-    else
-        println(i)
-    end
-end
-
 
 # Setting warm start values from CART output manually
 
-# Misclassified data points
-# 53 = 3
-z_cart[53, 4] = 1
-# 71 = 3 
-z_cart[71, 4] = 1
-# 73 = 3
-z_cart[73, 4] = 1
-# 77 = 3
-z_cart[77, 4] = 1
-# 78 = 3
-z_cart[78, 4] = 1
-# 84 = 3
-z_cart[84, 4] = 1
-# 107= 2
-z_cart[107, 3] = 1
+z_cart = zeros(150,8)
 
-l2 = [0, 1, 1, 1]
+X_ind = hcat(X, 1:150)
+br3 = X_ind[X_ind[:, 3] .>= 0.246, :]
+br6 = br3[br3[:, 3] .< 0.6355, :]
+br7 = br3[br3[:, 3] .>= 0.6355, :]
+le5 = br6[br6[:, 4] .< 0.5625, :]
+le6 = br6[br6[:, 4] .>= 0.5625, :]
+le7 = br7[br7[:, 4] .< 0.6875, :]
+le8 = br7[br7[:, 4] .>= 0.6875, :]
 
-c2 = zeros(3, 4) # set zeros
-c2[1, 2] = 1 
-c2[2, 3] = 1 
-c2[3, 4] = 1 
+le5ind = le5[:, 5]
 
-N_t2 = [0, 50, 45, 55]
+le6mod = le6[1:10, 5]
+le6mis = le6[11, 5]
+le6ind = le6[:, 5]
 
-N_kt2 = zeros(3, 4) # set zeros
-N_kt2[1,2] = 50 
-N_kt2[2,3] = 44 
-N_kt2[3,4] = 49 
+le7mod = le7[1:5, 5]
+le7mod = le7[6:9, 5]
+le7ind = le7[:, 5]
 
-N_kt2[2,4] = 6 #
-N_kt2[3,3] = 1 # 
+le8mod = le8[2:46, 5]
+le8mis = le8[1, 5]
+le8ind = le8[:, 5]
 
-L2 = [0, 0, 1, 6] 
+z_cart[1:50, 4] .= 1
+z_cart[le5ind, 5] .= 1
+z_cart[le6ind, 6] .= 1
+z_cart[le7ind, 7] .= 1
+z_cart[le8ind, 8] .= 1
 
-C2 = 2
+l2 = [0, 0, 0, 1, 1, 1, 1, 1]
 
+c2 = zeros(3, 8) # set zeros
+c2[1, 4] = 1 
+
+c2[2, 5] = 1 
+c2[2, 6] = 1 
+c2[2, 7] = 1 
+
+c2[3, 8] = 1 
 
 # Initialize optimization model
 model=formulation(X, a2, d2, z_cart, l2, c2)
