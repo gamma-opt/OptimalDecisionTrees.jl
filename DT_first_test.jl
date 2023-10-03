@@ -269,6 +269,8 @@ preds = apply_tree(model2, X)
 
 # Setting warm start values from CART output manually
 
+#=
+
 z_cart = zeros(150,8)
 
 X_ind = hcat(X, 1:150)
@@ -308,6 +310,7 @@ c2[2, 6] = 1
 
 c2[3, 7] = 1 
 c2[3, 8] = 1 
+=#
 
 # Initialize optimization model
 model=formulation(X, a2, d2, z_cart, l2, c2)
